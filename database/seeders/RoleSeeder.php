@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use App\Models\Role;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class RoleSeeder extends Seeder
@@ -14,31 +13,18 @@ class RoleSeeder extends Seeder
      */
     public function run(): void
     {
-        // Crear rol de Administrador
+        // Crear roles
         $adminRole = Role::firstOrCreate(
             ['name' => 'admin'],
-            [
-                'display_name' => 'Administrador',
-                'description' => 'Acceso completo al sistema'
-            ]
+            ['display_name' => 'Administrador', 'description' => 'Acceso completo al sistema']
         );
-
-        // Crear rol de Gerente
         $managerRole = Role::firstOrCreate(
             ['name' => 'manager'],
-            [
-                'display_name' => 'Gerente',
-                'description' => 'Gestión de inventario y reportes'
-            ]
+            ['display_name' => 'Gerente', 'description' => 'Gestión de inventario y reportes']
         );
-
-        // Crear rol de Empleado
         $employeeRole = Role::firstOrCreate(
             ['name' => 'employee'],
-            [
-                'display_name' => 'Empleado',
-                'description' => 'Acceso básico al sistema'
-            ]
+            ['display_name' => 'Empleado', 'description' => 'Acceso básico al sistema']
         );
 
         // Asignar todos los permisos al administrador
@@ -53,7 +39,16 @@ class RoleSeeder extends Seeder
             'inventory.view',
             'inventory.manage',
             'reports.view',
-            'users.view'
+            'users.view',
+            'warehouse.view',
+            'sales.create',
+            'sales.view',
+            'suppliers.view',
+            'purchases.view',
+            'customers.view',
+            'analytics.view',
+            'roles.view',
+            'settings.view',
         ])->get();
         $managerRole->permissions()->sync($managerPermissions->pluck('id'));
 
