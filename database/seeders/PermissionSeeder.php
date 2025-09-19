@@ -81,6 +81,17 @@ class PermissionSeeder extends Seeder
                 'description' => 'Permite acceso completo al sistema'
             ],
 
+            [
+                'name' => 'brands.view',
+                'display_name' => 'Ver Marcas',
+                'description' => 'Permite ver la gestión de marcas'
+            ],
+            [
+                'name' => 'categories.view',
+                'display_name' => 'Ver Categorías',
+                'description' => 'Permite ver la gestión de categorías'
+            ],
+
             // *** Nuevos permisos según tu menú ***
             [
                 'name' => 'warehouse.view',
