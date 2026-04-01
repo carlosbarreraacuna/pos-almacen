@@ -29,6 +29,10 @@ return [
         'https://localhost:3000',
         'https://localhost:3001',
         'https://localhost:3002',
+        'https://motospa.com.co',
+        'https://www.motospa.com.co',
+        'https://admin.motospa.com.co',
+        'https://api.motospa.com.co',
     ],
 
     'allowed_origins_patterns' => [],
