@@ -89,6 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{product}', [InventoryController::class, 'destroy']);
         Route::post('/{product}/adjust-stock', [InventoryController::class, 'adjustStock']);
         Route::get('/{product}/stock-movements', [InventoryController::class, 'stockMovements']);
+        Route::delete('/{product}/images/{image}', [InventoryController::class, 'deleteImage']);
     });
     
     // Rutas de Categorías

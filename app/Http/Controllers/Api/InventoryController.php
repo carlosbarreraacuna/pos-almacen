@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\Category;
 use App\Models\Brand;
 use App\Models\Location;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
 class InventoryController extends Controller
@@ -78,7 +80,9 @@ class InventoryController extends Controller
             'unit_of_measure' => 'required|string',
             'weight' => 'nullable|numeric|min:0',
             'location_id' => 'nullable|exists:locations,id',
-            'tax_rate' => 'nullable|numeric|min:0|max:100'
+            'tax_rate' => 'nullable|numeric|min:0|max:100',
+            'images' => 'nullable|array',
+            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048'
         ]);
 
         if ($validator->fails()) {
@@ -92,7 +96,7 @@ class InventoryController extends Controller
         try {
             DB::beginTransaction();
 
-            $product = Product::create($request->all());
+            $product = Product::create($request->except('images'));
 
             // Crear movimiento de stock inicial
             if ($product->stock_quantity > 0) {
@@ -108,11 +112,16 @@ class InventoryController extends Controller
                 ]);
             }
 
+            // Procesar imágenes si existen
+            if ($request->hasFile('images')) {
+                $this->handleImageUpload($product, $request->file('images'));
+            }
+
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'data' => $product->load(['category', 'brand', 'location']),
+                'data' => $product->load(['category', 'brand', 'location', 'images']),
                 'message' => 'Producto creado exitosamente'
             ], 201);
         } catch (\Exception $e) {
@@ -438,5 +447,52 @@ class InventoryController extends Controller
                 ]
             ]
         ]);
+    }
+
+    /**
+     * Handle image upload for product
+     */
+    private function handleImageUpload(Product $product, array $images): void
+    {
+        foreach ($images as $index => $image) {
+            // Generar nombre único para la imagen
+            $filename = $product->sku . '_' . time() . '_' . $index . '.' . $image->getClientOriginalExtension();
+            
+            // Guardar imagen en storage/app/public/products
+            $path = $image->storeAs('products', $filename, 'public');
+            
+            // Crear registro en base de datos
+            ProductImage::create([
+                'product_id' => $product->id,
+                'image_url' => '/storage/' . $path,
+                'is_primary' => $index === 0, // Primera imagen es principal
+                'sort_order' => $index
+            ]);
+        }
+    }
+
+    /**
+     * Delete product image
+     */
+    public function deleteImage(Product $product, ProductImage $image): JsonResponse
+    {
+        try {
+            // Eliminar archivo físico
+            $imagePath = str_replace('/storage/', '', $image->image_url);
+            Storage::disk('public')->delete($imagePath);
+            
+            // Eliminar registro de base de datos
+            $image->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Imagen eliminada exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar la imagen: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
