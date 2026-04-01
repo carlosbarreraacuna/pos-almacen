@@ -8,10 +8,12 @@ use App\Models\Category;
 use App\Models\Brand;
 use App\Models\Location;
 use App\Models\StockMovement;
+use App\Imports\ProductsImport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 class InventoryController extends Controller
 {
@@ -329,6 +331,112 @@ class InventoryController extends Controller
             'success' => true,
             'data' => $summary,
             'message' => 'Resumen de inventario obtenido exitosamente'
+        ]);
+    }
+
+    /**
+     * Import products from Excel file.
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Archivo inválido',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $file = $request->file('file');
+            $import = new ProductsImport();
+            
+            Excel::import($import, $file);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Productos importados exitosamente',
+                'data' => [
+                    'imported' => $import->getImportedCount(),
+                    'updated' => $import->getUpdatedCount(),
+                    'total' => Product::count(),
+                    'errors' => []
+                ]
+            ]);
+        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
+            $failures = $e->failures();
+            $errors = [];
+            
+            foreach ($failures as $failure) {
+                $errors[] = [
+                    'row' => $failure->row(),
+                    'attribute' => $failure->attribute(),
+                    'errors' => $failure->errors(),
+                    'values' => $failure->values()
+                ];
+            }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de validación en el archivo',
+                'errors' => $errors
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al importar productos: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Download Excel template for import.
+     */
+    public function downloadTemplate(): JsonResponse
+    {
+        $headers = [
+            'sku',
+            'nombre',
+            'descripcion',
+            'categoria',
+            'precio',
+            'precio_costo',
+            'stock',
+            'stock_minimo',
+            'unidad_medida',
+            'activo'
+        ];
+
+        $example = [
+            'PROD001',
+            'Producto Ejemplo',
+            'Descripción del producto',
+            'Categoría Ejemplo',
+            '10000',
+            '5000',
+            '100',
+            '10',
+            'unidad',
+            '1'
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'headers' => $headers,
+                'example' => $example,
+                'instructions' => [
+                    'El archivo debe ser formato Excel (.xlsx, .xls) o CSV',
+                    'La primera fila debe contener los encabezados exactos',
+                    'SKU, nombre, precio y stock son obligatorios',
+                    'activo: 1 para activo, 0 para inactivo',
+                    'Si el SKU ya existe, se actualizará el producto'
+                ]
+            ]
         ]);
     }
 }

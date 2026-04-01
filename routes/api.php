@@ -38,6 +38,29 @@ Route::prefix('auth')->group(function () {
 });
 
 // Rutas protegidas
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
+
+// Webhooks (sin autenticación, verificación por firma)
+Route::prefix('webhooks')->group(function () {
+    Route::post('/wompi', [\App\Http\Controllers\Api\WompiWebhookController::class, 'handle']);
+});
+
+// Rutas públicas de la tienda (con rate limiting)
+Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
+    Route::get('/productos', [\App\Http\Controllers\Api\StoreController::class, 'productos']);
+    Route::get('/productos/{codigo}', [\App\Http\Controllers\Api\StoreController::class, 'productoDetalle']);
+    Route::get('/stock/{codigo}', [\App\Http\Controllers\Api\StoreController::class, 'stock']);
+    Route::get('/categorias', [\App\Http\Controllers\Api\StoreController::class, 'categorias']);
+    Route::post('/ordenes', [\App\Http\Controllers\Api\StoreController::class, 'crearOrden']);
+    
+    // Subir imágenes (requiere autenticación)
+    Route::post('/productos/{codigo}/imagenes', [\App\Http\Controllers\Api\StoreController::class, 'subirImagenes'])
+        ->middleware('auth:sanctum');
+});
+
+// Rutas protegidas
 Route::middleware('auth:sanctum')->group(function () {
     // Rutas de usuarios
     Route::apiResource('users', UserController::class);
@@ -59,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/summary', [InventoryController::class, 'summary']);
         Route::get('/low-stock', [InventoryController::class, 'lowStock']);
         Route::get('/out-of-stock', [InventoryController::class, 'outOfStock']);
+        Route::post('/import', [InventoryController::class, 'import']);
+        Route::get('/import/template', [InventoryController::class, 'downloadTemplate']);
         Route::get('/{product}', [InventoryController::class, 'show']);
         Route::put('/{product}', [InventoryController::class, 'update']);
         Route::delete('/{product}', [InventoryController::class, 'destroy']);

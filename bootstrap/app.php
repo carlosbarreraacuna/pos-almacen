@@ -16,6 +16,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'role.permission' => \App\Http\Middleware\RolePermissionMiddleware::class,
             'sales.permission' => \App\Http\Middleware\CheckSalesPermission::class,
         ]);
+        
+        // Enable CORS for API routes
+        $middleware->api(append: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -80,6 +80,11 @@ class Product extends Model
         return $this->hasMany(PurchaseItem::class);
     }
 
+    public function images()
+    {
+        return $this->hasMany(ProductImage::class);
+    }
+
     // Scopes
     public function scopeActive($query)
     {
