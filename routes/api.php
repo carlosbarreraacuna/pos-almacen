@@ -55,6 +55,10 @@ Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
     Route::get('/categorias', [\App\Http\Controllers\Api\StoreController::class, 'categorias']);
     Route::post('/ordenes', [\App\Http\Controllers\Api\StoreController::class, 'crearOrden']);
     
+    // Cupones
+    Route::post('/cupones/validar', [\App\Http\Controllers\Api\CouponController::class, 'validate']);
+    Route::get('/cupones', [\App\Http\Controllers\Api\CouponController::class, 'activeForStore']);
+    
     // Subir imágenes (requiere autenticación)
     Route::post('/productos/{codigo}/imagenes', [\App\Http\Controllers\Api\StoreController::class, 'subirImagenes'])
         ->middleware('auth:sanctum');
@@ -140,6 +144,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{customer}', [CustomerController::class, 'destroy']);
         Route::patch('/{customer}/toggle-status', [CustomerController::class, 'toggleStatus']);
         Route::get('/{customer}/stats', [CustomerController::class, 'stats']);
+    });
+
+    // Rutas para Cupones (Admin)
+    Route::prefix('cupones')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\CouponController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\CouponController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'destroy']);
     });
 
     // Rutas para Ventas (POS)
