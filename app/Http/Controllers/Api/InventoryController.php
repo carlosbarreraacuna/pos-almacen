@@ -450,6 +450,59 @@ class InventoryController extends Controller
     }
 
     /**
+     * Upload images for a product
+     */
+    public function uploadImages(Request $request, Product $product): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'images' => 'required|array|max:5',
+            'images.*' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120' // 5MB max
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Errores de validación',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $uploadedImages = [];
+            $images = $request->file('images');
+
+            foreach ($images as $index => $image) {
+                // Generar nombre único para la imagen
+                $filename = $product->sku . '_' . time() . '_' . $index . '.' . $image->getClientOriginalExtension();
+                
+                // Guardar imagen en storage/app/public/products
+                $path = $image->storeAs('products', $filename, 'public');
+                
+                // Crear registro en base de datos
+                $productImage = ProductImage::create([
+                    'product_id' => $product->id,
+                    'image_url' => '/storage/' . $path,
+                    'is_primary' => $index === 0 && !$product->images()->exists(), // Primera imagen es principal si no hay otras
+                    'sort_order' => $product->images()->count() + $index
+                ]);
+
+                $uploadedImages[] = $productImage;
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => count($uploadedImages) . ' imagen(es) subida(s) exitosamente',
+                'data' => $uploadedImages
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir imágenes: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Handle image upload for product
      */
     private function handleImageUpload(Product $product, array $images): void
