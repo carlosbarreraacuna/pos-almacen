@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\StockAdjustmentController;
+use App\Http\Controllers\Api\WompiController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +59,9 @@ Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
     // Cupones
     Route::post('/cupones/validar', [\App\Http\Controllers\Api\CouponController::class, 'validate']);
     Route::get('/cupones', [\App\Http\Controllers\Api\CouponController::class, 'activeForStore']);
+    
+    // Wompi
+    Route::post('/wompi/integrity', [WompiController::class, 'generateIntegrity']);
     
     // Subir imágenes (requiere autenticación)
     Route::post('/productos/{codigo}/imagenes', [\App\Http\Controllers\Api\StoreController::class, 'subirImagenes'])
