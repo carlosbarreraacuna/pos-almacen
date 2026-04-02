@@ -56,7 +56,7 @@ class WompiController extends Controller
 
         try {
             // Buscar la orden por número de orden
-            $order = \App\Models\Order::where('numero_orden', $request->order_id)->first();
+            $order = \App\Models\Order::where('order_number', $request->order_id)->first();
 
             if (!$order) {
                 return response()->json([
@@ -66,7 +66,7 @@ class WompiController extends Controller
             }
 
             // Verificar que la referencia de pago coincida
-            if ($order->referencia_pago !== $request->transaction_id) {
+            if ($order->payment_reference !== $request->transaction_id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Referencia de pago no coincide'
@@ -77,42 +77,42 @@ class WompiController extends Controller
             $wompiStatus = $this->verifyWompiTransaction($request->transaction_id);
 
             // Actualizar estado de la orden si es necesario
-            if ($wompiStatus && $wompiStatus['status'] === 'APPROVED' && $order->estado_pago !== 'pagado') {
+            if ($wompiStatus && $wompiStatus['status'] === 'APPROVED' && $order->status !== 'paid') {
                 $order->update([
-                    'estado_pago' => 'pagado',
-                    'estado' => 'confirmado'
+                    'status' => 'paid',
+                    'paid_at' => now()
                 ]);
             }
 
             // Cargar relaciones
-            $order->load('items.producto');
+            $order->load('items');
 
             return response()->json([
                 'success' => true,
                 'data' => [
                     'order' => [
-                        'numero_orden' => $order->numero_orden,
+                        'numero_orden' => $order->order_number,
                         'fecha' => $order->created_at->format('d/m/Y H:i'),
-                        'cliente_nombre' => $order->cliente_nombre,
-                        'cliente_email' => $order->cliente_email,
-                        'cliente_telefono' => $order->cliente_telefono,
-                        'cliente_direccion' => $order->cliente_direccion,
-                        'cliente_ciudad' => $order->cliente_ciudad,
-                        'cliente_departamento' => $order->cliente_departamento,
+                        'cliente_nombre' => $order->customer_name,
+                        'cliente_email' => $order->customer_email,
+                        'cliente_telefono' => $order->customer_phone,
+                        'cliente_direccion' => $order->shipping_address,
+                        'cliente_ciudad' => $order->shipping_city,
+                        'cliente_departamento' => $order->shipping_state,
                         'subtotal' => $order->subtotal,
-                        'envio' => $order->envio,
+                        'envio' => $order->shipping_cost,
                         'total' => $order->total,
-                        'estado' => $order->estado,
-                        'estado_pago' => $order->estado_pago,
-                        'metodo_pago' => $order->metodo_pago,
-                        'cupon_codigo' => $order->cupon_codigo,
-                        'cupon_descuento' => $order->cupon_descuento,
+                        'estado' => $order->status,
+                        'estado_pago' => $order->status,
+                        'metodo_pago' => $order->payment_method,
+                        'cupon_codigo' => null,
+                        'cupon_descuento' => 0,
                         'items' => $order->items->map(function ($item) {
                             return [
-                                'producto_nombre' => $item->producto_nombre,
-                                'cantidad' => $item->cantidad,
-                                'precio' => $item->precio,
-                                'subtotal' => $item->cantidad * $item->precio,
+                                'producto_nombre' => $item->product_name,
+                                'cantidad' => $item->quantity,
+                                'precio' => $item->price,
+                                'subtotal' => $item->quantity * $item->price,
                             ];
                         }),
                     ],
