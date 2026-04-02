@@ -468,8 +468,14 @@ class InventoryController extends Controller
         }
 
         try {
+            // Asegurar que el directorio existe
+            if (!Storage::disk('public')->exists('products')) {
+                Storage::disk('public')->makeDirectory('products');
+            }
+
             $uploadedImages = [];
             $images = $request->file('images');
+            $currentImageCount = $product->images()->count();
 
             foreach ($images as $index => $image) {
                 // Generar nombre único para la imagen
@@ -482,8 +488,8 @@ class InventoryController extends Controller
                 $productImage = ProductImage::create([
                     'product_id' => $product->id,
                     'image_url' => '/storage/' . $path,
-                    'is_primary' => $index === 0 && !$product->images()->exists(), // Primera imagen es principal si no hay otras
-                    'sort_order' => $product->images()->count() + $index
+                    'is_primary' => $index === 0 && $currentImageCount === 0, // Primera imagen es principal si no hay otras
+                    'sort_order' => $currentImageCount + $index
                 ]);
 
                 $uploadedImages[] = $productImage;
@@ -495,9 +501,13 @@ class InventoryController extends Controller
                 'data' => $uploadedImages
             ]);
         } catch (\Exception $e) {
+            \Log::error('Error uploading images: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Error al subir imágenes: ' . $e->getMessage()
+                'message' => 'Error al subir imágenes: ' . $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
             ], 500);
         }
     }
