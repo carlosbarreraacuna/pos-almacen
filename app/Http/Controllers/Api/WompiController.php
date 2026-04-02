@@ -65,22 +65,23 @@ class WompiController extends Controller
                 ], 404);
             }
 
-            // Verificar que la referencia de pago coincida
-            if ($order->payment_reference !== $request->transaction_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Referencia de pago no coincide'
-                ], 403);
-            }
-
             // Verificar el estado del pago con Wompi
             $wompiStatus = $this->verifyWompiTransaction($request->transaction_id);
 
+            // Si el pago no está aprobado, rechazar
+            if (!$wompiStatus || $wompiStatus['status'] !== 'APPROVED') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El pago no ha sido aprobado'
+                ], 403);
+            }
+
             // Actualizar estado de la orden si es necesario
-            if ($wompiStatus && $wompiStatus['status'] === 'APPROVED' && $order->status !== 'paid') {
+            if ($order->status !== 'paid') {
                 $order->update([
                     'status' => 'paid',
-                    'paid_at' => now()
+                    'paid_at' => now(),
+                    'payment_reference' => $request->transaction_id
                 ]);
             }
 

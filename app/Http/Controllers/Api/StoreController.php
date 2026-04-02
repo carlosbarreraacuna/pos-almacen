@@ -237,6 +237,38 @@ class StoreController extends Controller
     }
 
     /**
+     * Actualizar referencia de pago de una orden
+     * PATCH /api/tienda/ordenes/{orderNumber}/payment
+     */
+    public function updatePayment(Request $request, $orderNumber)
+    {
+        $validated = $request->validate([
+            'payment_reference' => 'required|string',
+            'status' => 'nullable|string',
+        ]);
+
+        $order = Order::where('order_number', $orderNumber)->first();
+
+        if (!$order) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Orden no encontrada'
+            ], 404);
+        }
+
+        $order->update([
+            'payment_reference' => $validated['payment_reference'],
+            'status' => $validated['status'] ?? $order->status,
+            'paid_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Orden actualizada exitosamente',
+        ]);
+    }
+
+    /**
      * Subir imágenes de producto a Cloudinary
      * POST /api/tienda/productos/{codigo}/imagenes
      */

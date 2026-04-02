@@ -55,6 +55,7 @@ Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
     Route::get('/stock/{codigo}', [\App\Http\Controllers\Api\StoreController::class, 'stock']);
     Route::get('/categorias', [\App\Http\Controllers\Api\StoreController::class, 'categorias']);
     Route::post('/ordenes', [\App\Http\Controllers\Api\StoreController::class, 'crearOrden']);
+    Route::patch('/ordenes/{orderNumber}/payment', [\App\Http\Controllers\Api\StoreController::class, 'updatePayment']);
     
     // Cupones
     Route::post('/cupones/validar', [\App\Http\Controllers\Api\CouponController::class, 'validate']);
