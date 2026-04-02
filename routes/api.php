@@ -62,6 +62,7 @@ Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
     
     // Wompi
     Route::post('/wompi/integrity', [WompiController::class, 'generateIntegrity']);
+    Route::post('/wompi/verify-order', [WompiController::class, 'verifyOrder']);
     
     // Subir imágenes (requiere autenticación)
     Route::post('/productos/{codigo}/imagenes', [\App\Http\Controllers\Api\StoreController::class, 'subirImagenes'])
