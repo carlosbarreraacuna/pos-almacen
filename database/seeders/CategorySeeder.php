@@ -7,56 +7,33 @@ use App\Models\Category;
 
 class CategorySeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $categories = [
-            [
-                'name' => 'Repuestos',
-                'description' => 'Repuestos y accesorios para motos',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Lubricantes',
-                'description' => 'Aceites y lubricantes para motocicletas',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Accesorios',
-                'description' => 'Accesorios y equipamiento para motociclistas',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Neumáticos',
-                'description' => 'Llantas y neumáticos para motos',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Eléctricos',
-                'description' => 'Componentes eléctricos y electrónicos',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Frenos',
-                'description' => 'Sistema de frenos y componentes',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Suspensión',
-                'description' => 'Componentes de suspensión',
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Motor',
-                'description' => 'Partes y componentes del motor',
-                'is_active' => true,
-            ],
+            'BANDAS DE FRENO',
+            'BATERÍAS',
+            'CADENAS',
+            'CORREA DE TRANSMISIÓN',
+            'CUNAS DE DIRECCIÓN',
+            'DISCOS DE CLUTCH',
+            'EJES',
+            'FILTROS DE ACEITE',
+            'FILTROS DE AIRE - ESPUMA',
+            'FILTROS DE AIRE - PANEL',
+            'FILTROS DE GASOLINA',
+            'GUARDABARROS',
+            'KIT DE ARRASTRE',
+            'KIT DE VÁLVULAS',
+            'MANIGUETAS',
+            'MANUBRIOS',
+            'PASTILLAS DE FRENO',
+            'PATA LATERAL',
+            'RAMALES ELÉCTRICOS',
+            'VARILLA DE FRENO',
         ];
 
-        foreach ($categories as $categoryData) {
-            Category::create($categoryData);
+        foreach ($categories as $name) {
+            Category::firstOrCreate(['name' => $name], ['is_active' => true]);
         }
     }
 }

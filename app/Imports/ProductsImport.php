@@ -2,114 +2,124 @@
 
 namespace App\Imports;
 
-use App\Models\Product;
+use App\Models\Brand;
 use App\Models\Category;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithValidation;
-use Maatwebsite\Excel\Concerns\SkipsOnError;
-use Maatwebsite\Excel\Concerns\SkipsErrors;
+use App\Models\Product;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Concerns\SkipsErrors;
+use Maatwebsite\Excel\Concerns\SkipsOnError;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithStartRow;
 
-class ProductsImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnError
+/**
+ * Importa productos desde el Catálogo Darrow.
+ *
+ * Columnas por índice (fila 1 = encabezados, se salta con WithStartRow):
+ *   0=REFERENCIA  1=CATEGORÍA  2=DESCRIPCIÓN  3=MODELOS COMPATIBLES
+ *   4=MARCA       5=PRESENTACION  6=PRECIO  7=STOCK  8=STOCK MINIMO  9=ACTIVO
+ */
+class ProductsImport implements ToModel, WithStartRow, SkipsOnError
 {
     use SkipsErrors;
 
-    private $importedCount = 0;
-    private $updatedCount = 0;
+    private int $importedCount = 0;
+    private int $updatedCount  = 0;
+    private array $categoryCache = [];
+    private array $brandCache    = [];
 
-    /**
-     * @param array $row
-     *
-     * @return \Illuminate\Database\Eloquent\Model|null
-     */
+    /** Empezar en fila 2 para saltar la fila de encabezados */
+    public function startRow(): int
+    {
+        return 2;
+    }
+
     public function model(array $row)
     {
-        try {
-            // Buscar o crear categoría
-            $category = null;
-            if (!empty($row['categoria'])) {
-                $category = Category::firstOrCreate(
-                    ['name' => $row['categoria']],
-                    ['description' => 'Categoría importada']
-                );
-            }
+        $sku          = trim((string) ($row[0] ?? ''));
+        $categoryName = trim((string) ($row[1] ?? ''));
+        $name         = trim((string) ($row[2] ?? ''));
+        $compatible   = trim((string) ($row[3] ?? ''));
+        $brandName    = trim((string) ($row[4] ?? ''));
+        $presentation = trim((string) ($row[5] ?? '')) ?: 'unidad';
+        $price        = (float) ($row[6] ?? 0);
+        $stock        = (int)   ($row[7] ?? 0);
+        $minStock     = (int)   ($row[8] ?? 0);
+        $isActive     = (bool)  ($row[9] ?? true);
 
-            // Verificar si el producto ya existe por SKU
-            $product = Product::where('sku', $row['sku'])->first();
-
-            if ($product) {
-                // Actualizar producto existente
-                $product->update([
-                    'name' => $row['nombre'],
-                    'description' => $row['descripcion'] ?? null,
-                    'unit_price' => $row['precio'],
-                    'cost_price' => $row['precio_costo'] ?? 0,
-                    'stock_quantity' => $row['stock'],
-                    'min_stock_level' => $row['stock_minimo'] ?? 10,
-                    'category_id' => $category ? $category->id : null,
-                    'unit_of_measure' => $row['unidad_medida'] ?? 'unidad',
-                    'is_active' => isset($row['activo']) ? (bool)$row['activo'] : true,
-                ]);
-                $this->updatedCount++;
-                return null;
-            }
-
-            // Crear nuevo producto
-            $this->importedCount++;
-            return new Product([
-                'sku' => $row['sku'],
-                'name' => $row['nombre'],
-                'description' => $row['descripcion'] ?? null,
-                'unit_price' => $row['precio'],
-                'cost_price' => $row['precio_costo'] ?? 0,
-                'stock_quantity' => $row['stock'],
-                'min_stock_level' => $row['stock_minimo'] ?? 10,
-                'category_id' => $category ? $category->id : null,
-                'unit_of_measure' => $row['unidad_medida'] ?? 'unidad',
-                'is_active' => isset($row['activo']) ? (bool)$row['activo'] : true,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error importing product: ' . $e->getMessage(), ['row' => $row]);
-            throw $e;
+        // Saltar filas separadoras de categoría (ej: "▶ GUARDABARROS")
+        if (empty($sku) || empty($name)) {
+            return null;
         }
+
+        $categoryId = $this->resolveCategoryId($categoryName);
+        $brandId    = $this->resolveBrandId($brandName);
+
+        // withTrashed() para encontrar también productos borrados lógicamente
+        $product = Product::withTrashed()->where('sku', $sku)->first();
+
+        if ($product) {
+            $product->restore(); // no hace nada si no estaba borrado
+            $product->update([
+                'name'              => $name,
+                'compatible_models' => $compatible ?: null,
+                'category_id'       => $categoryId,
+                'brand_id'          => $brandId,
+                'unit_price'        => $price,
+                'cost_price'        => $price,
+                'stock_quantity'    => $stock,
+                'min_stock_level'   => $minStock,
+                'unit_of_measure'   => $presentation,
+                'is_active'         => $isActive,
+            ]);
+            $this->updatedCount++;
+            return null;
+        }
+
+        $this->importedCount++;
+        return new Product([
+            'sku'               => $sku,
+            'name'              => $name,
+            'description'       => $name,
+            'compatible_models' => $compatible ?: null,
+            'category_id'       => $categoryId,
+            'brand_id'          => $brandId,
+            'unit_price'        => $price,
+            'cost_price'        => $price,
+            'stock_quantity'    => $stock,
+            'min_stock_level'   => $minStock,
+            'unit_of_measure'   => $presentation,
+            'is_active'         => $isActive,
+        ]);
     }
 
-    /**
-     * Reglas de validación
-     */
-    public function rules(): array
+    private function resolveCategoryId(string $name): ?int
     {
-        return [
-            'sku' => 'required|string|max:50',
-            'nombre' => 'required|string|max:255',
-            'precio' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-        ];
+        if (empty($name)) return null;
+
+        if (!isset($this->categoryCache[$name])) {
+            $this->categoryCache[$name] = Category::firstOrCreate(
+                ['name' => $name],
+                ['is_active' => true]
+            )->id;
+        }
+
+        return $this->categoryCache[$name];
     }
 
-    /**
-     * Mensajes de validación personalizados
-     */
-    public function customValidationMessages()
+    private function resolveBrandId(string $name): ?int
     {
-        return [
-            'sku.required' => 'El SKU es obligatorio',
-            'nombre.required' => 'El nombre es obligatorio',
-            'precio.required' => 'El precio es obligatorio',
-            'precio.numeric' => 'El precio debe ser un número',
-            'stock.required' => 'El stock es obligatorio',
-            'stock.integer' => 'El stock debe ser un número entero',
-        ];
+        if (empty($name)) return null;
+
+        if (!isset($this->brandCache[$name])) {
+            $this->brandCache[$name] = Brand::firstOrCreate(
+                ['name' => $name],
+                ['is_active' => true]
+            )->id;
+        }
+
+        return $this->brandCache[$name];
     }
 
-    public function getImportedCount()
-    {
-        return $this->importedCount;
-    }
-
-    public function getUpdatedCount()
-    {
-        return $this->updatedCount;
-    }
+    public function getImportedCount(): int { return $this->importedCount; }
+    public function getUpdatedCount(): int  { return $this->updatedCount;  }
 }

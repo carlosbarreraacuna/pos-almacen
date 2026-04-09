@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -32,7 +33,8 @@ class InventoryController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('sku', 'like', "%{$search}%")
-                  ->orWhere('barcode', 'like', "%{$search}%");
+                  ->orWhere('barcode', 'like', "%{$search}%")
+                  ->orWhere('compatible_models', 'like', "%{$search}%");
             });
         }
 
@@ -67,22 +69,24 @@ class InventoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku',
-            'barcode' => 'nullable|string|unique:products,barcode',
-            'category_id' => 'nullable|exists:categories,id',
-            'brand_id' => 'nullable|exists:brands,id',
-            'unit_price' => 'required|numeric|min:0',
-            'cost_price' => 'required|numeric|min:0',
-            'stock_quantity' => 'required|integer|min:0',
-            'min_stock_level' => 'required|integer|min:0',
-            'max_stock_level' => 'nullable|integer|min:0',
-            'unit_of_measure' => 'required|string',
-            'weight' => 'nullable|numeric|min:0',
-            'location_id' => 'nullable|exists:locations,id',
-            'tax_rate' => 'nullable|numeric|min:0|max:100',
-            'images' => 'nullable|array',
-            'images.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048'
+            'name'              => 'required|string|max:255',
+            'sku'               => 'required|string|unique:products,sku',
+            'barcode'           => 'nullable|string|unique:products,barcode',
+            'description'       => 'nullable|string',
+            'compatible_models' => 'nullable|string',
+            'category_id'       => 'nullable|exists:categories,id',
+            'brand_id'          => 'nullable|exists:brands,id',
+            'unit_price'        => 'required|numeric|min:0',
+            'cost_price'        => 'nullable|numeric|min:0',
+            'stock_quantity'    => 'required|integer|min:0',
+            'min_stock_level'   => 'required|integer|min:0',
+            'max_stock_level'   => 'nullable|integer|min:0',
+            'unit_of_measure'   => 'nullable|string',
+            'weight'            => 'nullable|numeric|min:0',
+            'location_id'       => 'nullable|exists:locations,id',
+            'tax_rate'          => 'nullable|numeric|min:0|max:100',
+            'images'            => 'nullable|array',
+            'images.*'          => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -151,19 +155,21 @@ class InventoryController extends Controller
     public function update(Request $request, Product $product): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku,' . $product->id,
-            'barcode' => 'nullable|string|unique:products,barcode,' . $product->id,
-            'category_id' => 'nullable|exists:categories,id',
-            'brand_id' => 'nullable|exists:brands,id',
-            'unit_price' => 'required|numeric|min:0',
-            'cost_price' => 'required|numeric|min:0',
-            'min_stock_level' => 'required|integer|min:0',
-            'max_stock_level' => 'nullable|integer|min:0',
-            'unit_of_measure' => 'required|string',
-            'weight' => 'nullable|numeric|min:0',
-            'location_id' => 'nullable|exists:locations,id',
-            'tax_rate' => 'nullable|numeric|min:0|max:100'
+            'name'              => 'required|string|max:255',
+            'sku'               => 'required|string|unique:products,sku,' . $product->id,
+            'barcode'           => 'nullable|string|unique:products,barcode,' . $product->id,
+            'description'       => 'nullable|string',
+            'compatible_models' => 'nullable|string',
+            'category_id'       => 'nullable|exists:categories,id',
+            'brand_id'          => 'nullable|exists:brands,id',
+            'unit_price'        => 'required|numeric|min:0',
+            'cost_price'        => 'nullable|numeric|min:0',
+            'min_stock_level'   => 'required|integer|min:0',
+            'max_stock_level'   => 'nullable|integer|min:0',
+            'unit_of_measure'   => 'nullable|string',
+            'weight'            => 'nullable|numeric|min:0',
+            'location_id'       => 'nullable|exists:locations,id',
+            'tax_rate'          => 'nullable|numeric|min:0|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -371,9 +377,9 @@ class InventoryController extends Controller
                 'message' => 'Productos importados exitosamente',
                 'data' => [
                     'imported' => $import->getImportedCount(),
-                    'updated' => $import->getUpdatedCount(),
-                    'total' => Product::count(),
-                    'errors' => []
+                    'updated'  => $import->getUpdatedCount(),
+                    'total'    => $import->getImportedCount() + $import->getUpdatedCount(),
+                    'errors'   => []
                 ]
             ]);
         } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
@@ -408,44 +414,45 @@ class InventoryController extends Controller
     public function downloadTemplate(): JsonResponse
     {
         $headers = [
-            'sku',
-            'nombre',
-            'descripcion',
-            'categoria',
-            'precio',
-            'precio_costo',
-            'stock',
-            'stock_minimo',
-            'unidad_medida',
-            'activo'
+            'REFERENCIA',
+            'CATEGORÍA',
+            'DESCRIPCIÓN',
+            'MODELOS COMPATIBLES',
+            'MARCA',
+            'PRESENTACION',
+            'PRECIO',
+            'STOCK',
+            'STOCK MINIMO',
+            'ACTIVO',
         ];
 
         $example = [
-            'PROD001',
-            'Producto Ejemplo',
-            'Descripción del producto',
-            'Categoría Ejemplo',
+            '36C001-R',
+            'CUNAS DE DIRECCIÓN',
+            'CUNA DIR C/RODILLOS',
+            'BM100 / PULSAR 180 / BOXER 100',
+            'DARROW',
+            'CAJA X10',
             '10000',
-            '5000',
-            '100',
-            '10',
-            'unidad',
-            '1'
+            '1',
+            '1',
+            '1',
         ];
 
         return response()->json([
             'success' => true,
             'data' => [
-                'headers' => $headers,
-                'example' => $example,
+                'headers'      => $headers,
+                'example'      => $example,
                 'instructions' => [
-                    'El archivo debe ser formato Excel (.xlsx, .xls) o CSV',
+                    'El archivo debe ser formato Excel (.xlsx, .xls)',
                     'La primera fila debe contener los encabezados exactos',
-                    'SKU, nombre, precio y stock son obligatorios',
-                    'activo: 1 para activo, 0 para inactivo',
-                    'Si el SKU ya existe, se actualizará el producto'
-                ]
-            ]
+                    'REFERENCIA, DESCRIPCIÓN, PRECIO y STOCK son obligatorios',
+                    'ACTIVO: 1 para activo, 0 para inactivo',
+                    'Si la REFERENCIA (SKU) ya existe, se actualizará el producto',
+                    'MODELOS COMPATIBLES: lista los modelos de moto separados por /',
+                ],
+            ],
         ]);
     }
 
@@ -501,8 +508,8 @@ class InventoryController extends Controller
                 'data' => $uploadedImages
             ]);
         } catch (\Exception $e) {
-            \Log::error('Error uploading images: ' . $e->getMessage());
-            \Log::error($e->getTraceAsString());
+            Log::error('Error uploading images: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
