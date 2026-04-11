@@ -124,19 +124,19 @@ class DashboardController extends Controller
         }
 
         $format = match ($groupBy) {
-            'week'  => '%x-W%v',
-            'month' => '%Y-%m',
-            default => '%Y-%m-%d',
+            'week'  => 'IYYY"-W"IW',
+            'month' => 'YYYY-MM',
+            default => 'YYYY-MM-DD',
         };
 
         $rows = Sale::where('status', 'completed')
             ->whereBetween('sale_date', [$from, $to])
-            ->selectRaw("DATE_FORMAT(sale_date, '{$format}') as period")
+            ->selectRaw("TO_CHAR(sale_date, '{$format}') as period")
             ->selectRaw('COUNT(*) as sales_count')
             ->selectRaw('SUM(total_amount) as revenue')
             ->selectRaw('SUM(discount_amount) as discounts')
-            ->groupBy('period')
-            ->orderBy('period')
+            ->groupByRaw("TO_CHAR(sale_date, '{$format}')")
+            ->orderByRaw("TO_CHAR(sale_date, '{$format}') ASC")
             ->get();
 
         return response()->json([
@@ -245,9 +245,9 @@ class DashboardController extends Controller
 
         $rows = Sale::where('status', 'completed')
             ->whereBetween('sale_date', [$from, $to])
-            ->selectRaw('HOUR(sale_date) as hour, COUNT(*) as sales_count, SUM(total_amount) as revenue')
-            ->groupBy('hour')
-            ->orderBy('hour')
+            ->selectRaw('EXTRACT(HOUR FROM sale_date)::int as hour, COUNT(*) as sales_count, SUM(total_amount) as revenue')
+            ->groupByRaw('EXTRACT(HOUR FROM sale_date)::int')
+            ->orderByRaw('EXTRACT(HOUR FROM sale_date)::int ASC')
             ->get()
             ->keyBy('hour');
 
