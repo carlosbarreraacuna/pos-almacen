@@ -19,6 +19,7 @@ class Product extends Model
         'category_id',
         'brand_id',
         'unit_price',
+        'discount_percentage',
         'cost_price',
         'stock_quantity',
         'min_stock_level',
@@ -35,6 +36,7 @@ class Product extends Model
 
     protected $casts = [
         'unit_price' => 'decimal:2',
+        'discount_percentage' => 'integer',
         'cost_price' => 'decimal:2',
         'stock_quantity' => 'integer',
         'min_stock_level' => 'integer',

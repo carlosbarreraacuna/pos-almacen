@@ -30,6 +30,7 @@ class Sale extends Model
         'invoice_date',
         'due_date',
         'status',
+        'sale_channel',
         // Nuevos campos DIAN
         'requires_electronic_invoice',
         'invoice_type',

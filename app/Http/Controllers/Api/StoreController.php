@@ -23,10 +23,13 @@ class StoreController extends Controller
             ->where('is_active', true);
 
         // Filtro por categoría
-        if ($request->has('categoria')) {
-            $query->whereHas('category', function ($q) use ($request) {
-                $q->where('slug', $request->categoria)
-                  ->orWhere('name', 'like', '%' . $request->categoria . '%');
+        // La tabla categories no tiene columna slug, se compara convirtiendo name a slug en SQL:
+        // LOWER(REPLACE(name, ' ', '-')) = 'bandas-de-freno'
+        if ($request->filled('categoria')) {
+            $catSlug = strtolower(trim($request->categoria));
+            $query->whereHas('category', function ($q) use ($catSlug) {
+                $q->whereRaw("LOWER(REPLACE(name, ' ', '-')) = ?", [$catSlug])
+                  ->orWhereRaw("LOWER(name) LIKE ?", [str_replace('-', '%', $catSlug) . '%']);
             });
         }
 
@@ -35,6 +38,12 @@ class StoreController extends Controller
             $query->whereHas('brand', function ($q) use ($request) {
                 $q->where('name', 'like', '%' . $request->marca . '%');
             });
+        }
+
+        // Filtro por modelo de moto compatible
+        if ($request->filled('modelo')) {
+            $modelo = $request->modelo;
+            $query->where('compatible_models', 'ilike', '%' . $modelo . '%');
         }
 
         // Búsqueda por nombre, código o descripción
@@ -60,12 +69,38 @@ class StoreController extends Controller
             $query->where('unit_price', '<=', $request->precio_max);
         }
 
+        // Filtro: solo productos en oferta (descuento > 0)
+        if ($request->has('en_oferta') && $request->en_oferta === 'true') {
+            $query->where('discount_percentage', '>', 0);
+        }
+
+        // Ordenamiento
+        $ordenar = $request->get('ordenar', 'recientes');
+        switch ($ordenar) {
+            case 'precio_asc':
+                $query->orderByRaw('unit_price * (1 - discount_percentage / 100.0) ASC');
+                break;
+            case 'precio_desc':
+                $query->orderByRaw('unit_price * (1 - discount_percentage / 100.0) DESC');
+                break;
+            case 'descuento_desc':
+                $query->orderBy('discount_percentage', 'desc');
+                break;
+            case 'mas_vendidos':
+                $query->withCount(['saleItems as total_vendidos' => function ($q) {
+                    $q->join('sales', 'sale_items.sale_id', '=', 'sales.id')
+                      ->where('sales.status', 'completed');
+                }])->orderBy('total_vendidos', 'desc');
+                break;
+            default:
+                $query->orderBy('created_at', 'desc');
+        }
+
         // Paginación
         $page = $request->get('pagina', 1);
-        $perPage = 20;
+        $perPage = $request->get('por_pagina', 20);
 
-        $productos = $query->orderBy('created_at', 'desc')
-            ->paginate($perPage, ['*'], 'page', $page);
+        $productos = $query->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([
             'success' => true,
@@ -89,10 +124,14 @@ class StoreController extends Controller
      */
     public function productoDetalle($codigo)
     {
-        $producto = Product::with(['category', 'brand', 'images'])
-            ->where('sku', $codigo)
-            ->orWhere('id', $codigo)
-            ->first();
+        $query = Product::with(['category', 'brand', 'images'])
+            ->where('sku', $codigo);
+
+        if (is_numeric($codigo)) {
+            $query->orWhere('id', (int) $codigo);
+        }
+
+        $producto = $query->first();
 
         if (!$producto) {
             return response()->json([
@@ -113,9 +152,13 @@ class StoreController extends Controller
      */
     public function stock($codigo)
     {
-        $producto = Product::where('sku', $codigo)
-            ->orWhere('id', $codigo)
-            ->first(['stock_quantity', 'min_stock_level']);
+        $query = Product::where('sku', $codigo);
+
+        if (is_numeric($codigo)) {
+            $query->orWhere('id', (int) $codigo);
+        }
+
+        $producto = $query->first(['stock_quantity', 'min_stock_level']);
 
         if (!$producto) {
             return response()->json([
@@ -279,9 +322,11 @@ class StoreController extends Controller
             'imagenes.*' => 'image|mimes:jpeg,png,jpg,webp|max:5120', // 5MB max
         ]);
 
-        $producto = Product::where('sku', $codigo)
-            ->orWhere('id', $codigo)
-            ->first();
+        $q = Product::where('sku', $codigo);
+        if (is_numeric($codigo)) {
+            $q->orWhere('id', (int) $codigo);
+        }
+        $producto = $q->first();
 
         if (!$producto) {
             return response()->json([
@@ -338,18 +383,28 @@ class StoreController extends Controller
      */
     private function formatProducto($producto, $detallado = false)
     {
+        $descuento = (int) ($producto->discount_percentage ?? 0);
+        $precioOriginal = (float) $producto->unit_price;
+        $precioOferta = $descuento > 0
+            ? round($precioOriginal * (1 - $descuento / 100))
+            : null;
+
         $data = [
             'id' => $producto->id,
             'codigo' => $producto->sku,
             'nombre' => $producto->name,
-            'slug' => Str::slug($producto->name) . '-' . $producto->sku,
-            'precio_venta' => (float) $producto->unit_price,
+            'slug' => Str::slug($producto->name) . '--' . $producto->sku,
+            'precio_venta' => $precioOriginal,
+            'descuento_porcentaje' => $descuento,
+            'precio_oferta' => $precioOferta,
+            'en_oferta' => $descuento > 0,
             'stock' => (int) $producto->stock_quantity,
             'disponible' => $producto->stock_quantity > 0,
             'categoria' => $producto->category ? $producto->category->name : null,
             'categoria_slug' => $producto->category ? Str::slug($producto->category->name) : null,
             'proveedor_marca' => $producto->brand ? $producto->brand->name : null,
             'descripcion' => $producto->description ?? '',
+            'modelos_compatibles' => $producto->compatible_models ?? null,
             'imagenes' => $this->getProductImages($producto),
         ];
 

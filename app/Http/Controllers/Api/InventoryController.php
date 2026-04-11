@@ -414,29 +414,33 @@ class InventoryController extends Controller
     public function downloadTemplate(): JsonResponse
     {
         $headers = [
-            'REFERENCIA',
-            'CATEGORÍA',
-            'DESCRIPCIÓN',
-            'MODELOS COMPATIBLES',
-            'MARCA',
-            'PRESENTACION',
-            'PRECIO',
-            'STOCK',
-            'STOCK MINIMO',
-            'ACTIVO',
+            'SKU',
+            'Nombre',
+            'Categoría',
+            'Precio Venta',
+            'Costo',
+            'Stock',
+            'Stock Mínimo',
+            'Unidad de Medida',
+            'Marca',
+            'Modelos Compatibles',
+            'Descripción',
+            'Fecha Creación',
         ];
 
         $example = [
             '36C001-R',
-            'CUNAS DE DIRECCIÓN',
             'CUNA DIR C/RODILLOS',
-            'BM100 / PULSAR 180 / BOXER 100',
-            'DARROW',
-            'CAJA X10',
+            'CUNAS DE DIRECCIÓN',
             '10000',
+            '8000',
             '1',
             '1',
-            '1',
+            'CAJA X10',
+            'DARROW',
+            'BM100 / PULSAR 180 / BOXER 100',
+            'CUNA DIR C/RODILLOS',
+            date('d/m/Y'),
         ];
 
         return response()->json([
@@ -447,10 +451,10 @@ class InventoryController extends Controller
                 'instructions' => [
                     'El archivo debe ser formato Excel (.xlsx, .xls)',
                     'La primera fila debe contener los encabezados exactos',
-                    'REFERENCIA, DESCRIPCIÓN, PRECIO y STOCK son obligatorios',
-                    'ACTIVO: 1 para activo, 0 para inactivo',
-                    'Si la REFERENCIA (SKU) ya existe, se actualizará el producto',
-                    'MODELOS COMPATIBLES: lista los modelos de moto separados por /',
+                    'SKU, Nombre, Precio Venta y Stock son obligatorios',
+                    'Si el SKU ya existe, se actualizará el producto existente',
+                    'Modelos Compatibles: lista los modelos de moto separados por /',
+                    'Fecha Creación es opcional, se puede dejar en blanco',
                 ],
             ],
         ]);
