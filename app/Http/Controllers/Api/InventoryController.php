@@ -494,8 +494,8 @@ class InventoryController extends Controller
                 // Crear registro en base de datos
                 $productImage = ProductImage::create([
                     'product_id' => $product->id,
-                    'image_url' => '/storage/' . $path,
-                    'is_primary' => $index === 0 && $currentImageCount === 0, // Primera imagen es principal si no hay otras
+                    'image_url' => Storage::disk('public')->url($path),
+                    'is_primary' => $index === 0 && $currentImageCount === 0,
                     'sort_order' => $currentImageCount + $index
                 ]);
 
@@ -534,8 +534,8 @@ class InventoryController extends Controller
             // Crear registro en base de datos
             ProductImage::create([
                 'product_id' => $product->id,
-                'image_url' => '/storage/' . $path,
-                'is_primary' => $index === 0, // Primera imagen es principal
+                'image_url' => Storage::disk('public')->url($path),
+                'is_primary' => $index === 0,
                 'sort_order' => $index
             ]);
         }
@@ -548,7 +548,8 @@ class InventoryController extends Controller
     {
         try {
             // Eliminar archivo físico
-            $imagePath = str_replace('/storage/', '', $image->image_url);
+            // Soporta tanto URL completa (https://...//storage/products/x.jpg) como ruta relativa (/storage/products/x.jpg)
+            $imagePath = preg_replace('#^.*/storage/#', '', $image->image_url);
             Storage::disk('public')->delete($imagePath);
             
             // Eliminar registro de base de datos
