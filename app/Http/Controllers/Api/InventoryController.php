@@ -25,7 +25,7 @@ class InventoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::with(['category', 'brand', 'location']);
+        $query = Product::with(['category', 'brand', 'location', 'images']);
 
         // Filtros
         if ($request->has('search')) {
@@ -144,7 +144,7 @@ class InventoryController extends Controller
     {
         return response()->json([
             'success' => true,
-            'data' => $product->load(['category', 'brand', 'location', 'stockMovements.user']),
+            'data' => $product->load(['category', 'brand', 'location', 'images', 'stockMovements.user']),
             'message' => 'Producto obtenido exitosamente'
         ]);
     }

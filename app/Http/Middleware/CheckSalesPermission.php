@@ -28,7 +28,7 @@ class CheckSalesPermission
         }
 
         // Verificar si el usuario tiene el permiso requerido
-        if (!$user->can($permission)) {
+        if (!$user->hasPermission($permission)) {
             return response()->json([
                 'message' => 'No tienes permisos para realizar esta acción',
                 'required_permission' => $permission

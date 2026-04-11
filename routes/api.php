@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\StockAdjustmentController;
 use App\Http\Controllers\Api\WompiController;
+use App\Http\Controllers\Api\DashboardController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -150,7 +151,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{customer}', [CustomerController::class, 'update']);
         Route::delete('/{customer}', [CustomerController::class, 'destroy']);
         Route::patch('/{customer}/toggle-status', [CustomerController::class, 'toggleStatus']);
-        Route::get('/{customer}/stats', [CustomerController::class, 'stats']);
+        Route::get('/{customer}/sales', [CustomerController::class, 'sales']);
     });
 
     // Rutas para Cupones (Admin)
@@ -160,6 +161,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'show']);
         Route::put('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'update']);
         Route::delete('/{id}', [\App\Http\Controllers\Api\CouponController::class, 'destroy']);
+    });
+
+    // Dashboard métricas
+    Route::prefix('dashboard')->group(function () {
+        Route::get('/summary',          [DashboardController::class, 'summary']);
+        Route::get('/sales-trend',      [DashboardController::class, 'salesTrend']);
+        Route::get('/top-products',     [DashboardController::class, 'topProducts']);
+        Route::get('/top-customers',    [DashboardController::class, 'topCustomers']);
+        Route::get('/hourly',           [DashboardController::class, 'hourly']);
+        Route::get('/by-category',      [DashboardController::class, 'byCategory']);
+        Route::get('/inventory-health', [DashboardController::class, 'inventoryHealth']);
     });
 
     // Rutas para Ventas (POS)

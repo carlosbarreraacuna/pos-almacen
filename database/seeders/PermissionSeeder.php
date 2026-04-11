@@ -90,7 +90,7 @@ class PermissionSeeder extends Seeder
                 'name' => 'categories.view',
                 'display_name' => 'Ver Categorías',
                 'description' => 'Permite ver la gestión de categorías'
-            ],
+                ],
 
             // *** Nuevos permisos según tu menú ***
             [

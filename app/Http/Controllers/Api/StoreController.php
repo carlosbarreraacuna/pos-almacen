@@ -19,7 +19,7 @@ class StoreController extends Controller
      */
     public function productos(Request $request)
     {
-        $query = Product::with(['category', 'brand'])
+        $query = Product::with(['category', 'brand', 'images'])
             ->where('is_active', true);
 
         // Filtro por categoría

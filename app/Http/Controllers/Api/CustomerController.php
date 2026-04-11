@@ -4,163 +4,185 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\Sale;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 
 class CustomerController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $query = Customer::query();
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function($q) use ($search) {
+            $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('document_number', 'like', "%{$search}%");
+                  ->orWhere('tax_id', 'like', "%{$search}%");
             });
         }
 
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        if ($request->filled('customer_type')) {
+            $query->where('customer_type', $request->customer_type);
         }
 
-        if ($request->has('customer_type')) {
-            $query->where('customer_type', $request->customer_type);
+        if ($request->filled('is_active')) {
+            $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
         }
 
         $perPage = $request->get('per_page', 15);
         $customers = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
-        return response()->json($customers);
+        return response()->json([
+            'success' => true,
+            'data'    => $customers,
+        ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'nullable|email|unique:customers,email',
-            'phone' => 'nullable|string|max:20',
-            'document_type' => 'nullable|string|max:50',
+            'name'            => 'required|string|max:255',
+            'email'           => 'nullable|email|unique:customers,email',
+            'phone'           => 'nullable|string|max:20',
+            'document_type'   => 'nullable|string|max:50',
             'document_number' => 'nullable|string|max:50',
-            'customer_type' => 'required|in:individual,business',
-            'address' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'state' => 'nullable|string|max:100',
-            'country' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:20',
+            'customer_type'   => 'nullable|in:individual,business,wholesale,retail',
+            'address'         => 'nullable|string',
+            'city'            => 'nullable|string|max:100',
+            'state'           => 'nullable|string|max:100',
+            'country'         => 'nullable|string|max:100',
+            'postal_code'     => 'nullable|string|max:20',
+            'tax_id'          => 'nullable|string|max:50|unique:customers,tax_id',
+            'credit_limit'    => 'nullable|numeric|min:0',
+            'payment_terms'   => 'nullable|in:cash,credit,net_15,net_30,net_60',
+            'notes'           => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Errores de validación',
+                'errors'  => $validator->errors(),
+            ], 422);
         }
 
-        $customer = Customer::create($request->all());
+        $data = $validator->validated();
+        $data['customer_type'] = $data['customer_type'] ?? 'individual';
+        $data['is_active']     = true;
+
+        $customer = Customer::create($data);
 
         return response()->json([
+            'success' => true,
             'message' => 'Cliente creado exitosamente',
-            'customer' => $customer
+            'data'    => $customer,
         ], 201);
     }
 
-    public function show(Customer $customer)
+    public function show(Customer $customer): JsonResponse
     {
-        return response()->json($customer);
+        $customer->loadCount('sales');
+        $customer->total_sales_amount = $customer->sales()->sum('total_amount');
+
+        return response()->json([
+            'success' => true,
+            'data'    => $customer,
+        ]);
     }
 
-    public function update(Request $request, Customer $customer)
+    public function update(Request $request, Customer $customer): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
-            'email' => 'nullable|email|unique:customers,email,' . $customer->id,
-            'phone' => 'nullable|string|max:20',
-            'document_type' => 'nullable|string|max:50',
-            'document_number' => 'nullable|string|max:50',
-            'customer_type' => 'sometimes|required|in:individual,business',
-            'address' => 'nullable|string',
-            'city' => 'nullable|string|max:100',
-            'state' => 'nullable|string|max:100',
-            'country' => 'nullable|string|max:100',
-            'postal_code' => 'nullable|string|max:20',
+            'name'          => 'sometimes|required|string|max:255',
+            'email'         => 'nullable|email|unique:customers,email,' . $customer->id,
+            'phone'         => 'nullable|string|max:20',
+            'customer_type' => 'nullable|in:individual,business,wholesale,retail',
+            'address'       => 'nullable|string',
+            'city'          => 'nullable|string|max:100',
+            'state'         => 'nullable|string|max:100',
+            'country'       => 'nullable|string|max:100',
+            'postal_code'   => 'nullable|string|max:20',
+            'tax_id'        => 'nullable|string|max:50|unique:customers,tax_id,' . $customer->id,
+            'credit_limit'  => 'nullable|numeric|min:0',
+            'payment_terms' => 'nullable|in:cash,credit,net_15,net_30,net_60',
+            'is_active'     => 'nullable|boolean',
+            'notes'         => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'success' => false,
+                'message' => 'Errores de validación',
+                'errors'  => $validator->errors(),
+            ], 422);
         }
 
-        $customer->update($request->all());
+        $customer->update($validator->validated());
 
         return response()->json([
+            'success' => true,
             'message' => 'Cliente actualizado exitosamente',
-            'customer' => $customer
+            'data'    => $customer->fresh(),
         ]);
     }
 
-    public function destroy(Customer $customer)
+    public function destroy(Customer $customer): JsonResponse
     {
         $customer->delete();
 
         return response()->json([
-            'message' => 'Cliente eliminado exitosamente'
+            'success' => true,
+            'message' => 'Cliente eliminado exitosamente',
         ]);
     }
 
-    public function search(Request $request)
+    public function toggleStatus(Customer $customer): JsonResponse
     {
-        $search = $request->get('q', '');
-        
-        $customers = Customer::where('name', 'like', "%{$search}%")
-            ->orWhere('email', 'like', "%{$search}%")
-            ->orWhere('phone', 'like', "%{$search}%")
-            ->orWhere('document_number', 'like', "%{$search}%")
-            ->where('status', 'active')
-            ->limit(10)
-            ->get();
-
-        return response()->json($customers);
-    }
-
-    public function getCustomerTypes()
-    {
-        return response()->json([
-            ['value' => 'individual', 'label' => 'Individual'],
-            ['value' => 'business', 'label' => 'Empresa']
-        ]);
-    }
-
-    public function getPaymentTerms()
-    {
-        return response()->json([
-            ['value' => 'immediate', 'label' => 'Inmediato'],
-            ['value' => 'net_15', 'label' => 'Neto 15 días'],
-            ['value' => 'net_30', 'label' => 'Neto 30 días'],
-            ['value' => 'net_60', 'label' => 'Neto 60 días'],
-            ['value' => 'net_90', 'label' => 'Neto 90 días']
-        ]);
-    }
-
-    public function toggleStatus(Customer $customer)
-    {
-        $customer->status = $customer->status === 'active' ? 'inactive' : 'active';
+        $customer->is_active = !$customer->is_active;
         $customer->save();
 
         return response()->json([
+            'success' => true,
             'message' => 'Estado actualizado exitosamente',
-            'customer' => $customer
+            'data'    => $customer,
         ]);
     }
 
-    public function stats(Customer $customer)
+    public function sales(Customer $customer, Request $request): JsonResponse
     {
-        $stats = [
-            'total_orders' => $customer->orders()->count(),
-            'total_spent' => $customer->orders()->sum('total'),
-            'pending_orders' => $customer->orders()->where('status', 'pending')->count(),
-            'completed_orders' => $customer->orders()->where('status', 'completed')->count(),
-        ];
+        $perPage = $request->get('per_page', 10);
+        $sales = $customer->sales()
+            ->with('saleItems.product')
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
 
-        return response()->json($stats);
+        return response()->json([
+            'success' => true,
+            'data'    => $sales,
+        ]);
+    }
+
+    public function search(Request $request): JsonResponse
+    {
+        $search = $request->get('q', '');
+
+        $customers = Customer::where('is_active', true)
+            ->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('tax_id', 'like', "%{$search}%");
+            })
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $customers,
+        ]);
     }
 }
