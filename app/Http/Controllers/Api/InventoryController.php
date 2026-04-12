@@ -155,21 +155,23 @@ class InventoryController extends Controller
     public function update(Request $request, Product $product): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name'              => 'required|string|max:255',
-            'sku'               => 'required|string|unique:products,sku,' . $product->id,
-            'barcode'           => 'nullable|string|unique:products,barcode,' . $product->id,
-            'description'       => 'nullable|string',
-            'compatible_models' => 'nullable|string',
-            'category_id'       => 'nullable|exists:categories,id',
-            'brand_id'          => 'nullable|exists:brands,id',
-            'unit_price'        => 'required|numeric|min:0',
-            'cost_price'        => 'nullable|numeric|min:0',
-            'min_stock_level'   => 'required|integer|min:0',
-            'max_stock_level'   => 'nullable|integer|min:0',
-            'unit_of_measure'   => 'nullable|string',
-            'weight'            => 'nullable|numeric|min:0',
-            'location_id'       => 'nullable|exists:locations,id',
-            'tax_rate'          => 'nullable|numeric|min:0|max:100',
+            'name'                => 'sometimes|required|string|max:255',
+            'sku'                 => 'sometimes|required|string|unique:products,sku,' . $product->id,
+            'barcode'             => 'nullable|string|unique:products,barcode,' . $product->id,
+            'description'         => 'nullable|string',
+            'compatible_models'   => 'nullable|string',
+            'category_id'         => 'nullable|exists:categories,id',
+            'brand_id'            => 'nullable|exists:brands,id',
+            'unit_price'          => 'sometimes|required|numeric|min:0',
+            'cost_price'          => 'nullable|numeric|min:0',
+            'discount_percentage' => 'nullable|integer|min:0|max:100',
+            'min_stock_level'     => 'sometimes|required|integer|min:0',
+            'max_stock_level'     => 'nullable|integer|min:0',
+            'unit_of_measure'     => 'nullable|string',
+            'weight'              => 'nullable|numeric|min:0',
+            'location_id'         => 'nullable|exists:locations,id',
+            'tax_rate'            => 'nullable|numeric|min:0|max:100',
+            'is_active'           => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
