@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class StoreController extends Controller
 {
@@ -220,25 +221,38 @@ class StoreController extends Controller
             'notas' => 'nullable|string',
         ]);
 
+        // Intentar vincular al cliente autenticado
+        $customerId = null;
+        try {
+            $token = $request->bearerToken();
+            if ($token) {
+                $pat = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+                if ($pat && $pat->tokenable_type === \App\Models\Customer::class) {
+                    $customerId = $pat->tokenable_id;
+                }
+            }
+        } catch (\Exception $e) {}
+
         DB::beginTransaction();
         try {
             // Crear la orden
             $orden = Order::create([
-                'order_number' => 'WEB-' . strtoupper(Str::random(8)),
-                'customer_name' => $validated['cliente_nombre'],
-                'customer_email' => $validated['cliente_email'],
-                'customer_phone' => $validated['cliente_telefono'],
-                'shipping_address' => $validated['cliente_direccion'],
-                'shipping_city' => $validated['cliente_ciudad'],
-                'shipping_state' => $validated['cliente_departamento'],
-                'subtotal' => $validated['subtotal'],
-                'shipping_cost' => $validated['envio'] ?? 0,
-                'total' => $validated['total'],
-                'payment_method' => $validated['metodo_pago'],
+                'order_number'      => 'WEB-' . strtoupper(Str::random(8)),
+                'customer_id'       => $customerId,
+                'customer_name'     => $validated['cliente_nombre'],
+                'customer_email'    => $validated['cliente_email'],
+                'customer_phone'    => $validated['cliente_telefono'],
+                'shipping_address'  => $validated['cliente_direccion'],
+                'shipping_city'     => $validated['cliente_ciudad'],
+                'shipping_state'    => $validated['cliente_departamento'],
+                'subtotal'          => $validated['subtotal'],
+                'shipping_cost'     => $validated['envio'] ?? 0,
+                'total'             => $validated['total'],
+                'payment_method'    => $validated['metodo_pago'],
                 'payment_reference' => $validated['referencia_pago'] ?? null,
-                'status' => 'pending',
-                'notes' => $validated['notas'] ?? null,
-                'source' => 'web',
+                'status'            => 'pending',
+                'notes'             => $validated['notas'] ?? null,
+                'source'            => 'web',
             ]);
 
             // Crear los items de la orden
@@ -260,6 +274,63 @@ class StoreController extends Controller
             }
 
             DB::commit();
+
+            // Enviar correo de confirmación
+            try {
+                $emailTo   = $validated['cliente_email'];
+                $emailName = $validated['cliente_nombre'];
+                $fmt = fn($n) => '$' . number_format($n, 0, ',', '.');
+
+                $itemsHtml = '';
+                foreach ($validated['items'] as $item) {
+                    $p = Product::find($item['producto_id']);
+                    $nombre = $p ? $p->name : 'Producto';
+                    $itemsHtml .= "<tr>
+                        <td style='padding:8px;border-bottom:1px solid #eee'>{$nombre}</td>
+                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:center'>{$item['cantidad']}</td>
+                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item['precio'])}</td>
+                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item['cantidad'] * $item['precio'])}</td>
+                    </tr>";
+                }
+
+                $html = "
+                <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333'>
+                  <div style='background:#1a1a1a;padding:24px;text-align:center'>
+                    <h1 style='color:#fff;margin:0;font-size:22px'>Moto Spa</h1>
+                    <p style='color:#aaa;margin:6px 0 0'>Confirmación de pedido</p>
+                  </div>
+                  <div style='padding:24px'>
+                    <p>Hola <strong>{$emailName}</strong>,</p>
+                    <p>¡Gracias por tu compra! Tu pedido ha sido recibido y está siendo procesado.</p>
+                    <div style='background:#f5f5f5;padding:16px;border-radius:8px;margin:16px 0'>
+                      <p style='margin:0 0 4px'><strong>Número de pedido:</strong> {$orden->order_number}</p>
+                      <p style='margin:0'><strong>Total:</strong> {$fmt($validated['total'])}</p>
+                    </div>
+                    <table style='width:100%;border-collapse:collapse;margin:16px 0'>
+                      <thead>
+                        <tr style='background:#f0f0f0'>
+                          <th style='padding:8px;text-align:left'>Producto</th>
+                          <th style='padding:8px;text-align:center'>Cant.</th>
+                          <th style='padding:8px;text-align:right'>Precio</th>
+                          <th style='padding:8px;text-align:right'>Subtotal</th>
+                        </tr>
+                      </thead>
+                      <tbody>{$itemsHtml}</tbody>
+                    </table>
+                    <p style='text-align:right'><strong>Envío:</strong> {$fmt($validated['envio'] ?? 0)}</p>
+                    <p style='text-align:right;font-size:18px'><strong>Total: {$fmt($validated['total'])}</strong></p>
+                    <hr style='border:none;border-top:1px solid #eee;margin:20px 0'>
+                    <p style='color:#666;font-size:13px'>Te notificaremos cuando tu pedido sea enviado. Si tienes preguntas, contáctanos.</p>
+                  </div>
+                </div>";
+
+                Mail::html($html, function ($message) use ($emailTo, $emailName, $orden) {
+                    $message->to($emailTo, $emailName)
+                            ->subject("Confirmación de pedido {$orden->order_number} - Moto Spa");
+                });
+            } catch (\Exception $mailEx) {
+                // No bloquear si falla el correo
+            }
 
             return response()->json([
                 'success' => true,

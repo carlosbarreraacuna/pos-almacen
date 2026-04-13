@@ -8,6 +8,7 @@ use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class SaleController extends Controller
@@ -126,10 +127,69 @@ class SaleController extends Controller
 
             DB::commit();
 
+            // Enviar correo de confirmación si el cliente tiene email
+            try {
+                $sale->load(['saleItems.product', 'customer']);
+                $customer = $sale->customer;
+                if ($customer && $customer->email) {
+                    $fmt = fn($n) => '$' . number_format($n, 0, ',', '.');
+
+                    $itemsHtml = '';
+                    foreach ($sale->saleItems as $item) {
+                        $nombre = $item->product?->name ?? 'Producto';
+                        $itemsHtml .= "<tr>
+                            <td style='padding:8px;border-bottom:1px solid #eee'>{$nombre}</td>
+                            <td style='padding:8px;border-bottom:1px solid #eee;text-align:center'>{$item->quantity}</td>
+                            <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item->unit_price)}</td>
+                            <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item->total_amount)}</td>
+                        </tr>";
+                    }
+
+                    $saleRef = $sale->sale_number ?? ('POS-' . $sale->id);
+                    $html = "
+                    <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333'>
+                      <div style='background:#1a1a1a;padding:24px;text-align:center'>
+                        <h1 style='color:#fff;margin:0;font-size:22px'>Moto Spa</h1>
+                        <p style='color:#aaa;margin:6px 0 0'>Comprobante de compra — Tienda física</p>
+                      </div>
+                      <div style='padding:24px'>
+                        <p>Hola <strong>{$customer->name}</strong>,</p>
+                        <p>Gracias por tu compra en nuestra tienda. Aquí tienes el resumen:</p>
+                        <div style='background:#f5f5f5;padding:16px;border-radius:8px;margin:16px 0'>
+                          <p style='margin:0 0 4px'><strong>Referencia:</strong> {$saleRef}</p>
+                          <p style='margin:0 0 4px'><strong>Pago:</strong> " . ucfirst($sale->payment_method ?? '') . "</p>
+                          <p style='margin:0'><strong>Total:</strong> {$fmt($sale->total_amount)}</p>
+                        </div>
+                        <table style='width:100%;border-collapse:collapse;margin:16px 0'>
+                          <thead>
+                            <tr style='background:#f0f0f0'>
+                              <th style='padding:8px;text-align:left'>Producto</th>
+                              <th style='padding:8px;text-align:center'>Cant.</th>
+                              <th style='padding:8px;text-align:right'>Precio</th>
+                              <th style='padding:8px;text-align:right'>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>{$itemsHtml}</tbody>
+                        </table>
+                        <p style='text-align:right;font-size:18px'><strong>Total: {$fmt($sale->total_amount)}</strong></p>
+                        <hr style='border:none;border-top:1px solid #eee;margin:20px 0'>
+                        <p style='color:#666;font-size:13px'>Puedes ver esta compra en tu historial de pedidos en motospa.com.co</p>
+                      </div>
+                    </div>";
+
+                    Mail::html($html, function ($message) use ($customer, $saleRef) {
+                        $message->to($customer->email, $customer->name)
+                                ->subject("Comprobante de compra {$saleRef} - Moto Spa");
+                    });
+                }
+            } catch (\Exception $mailEx) {
+                // No bloquear si falla el correo
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Venta registrada exitosamente',
-                'data'    => $sale->load(['saleItems.product', 'customer']),
+                'data'    => $sale,
             ], 201);
 
         } catch (\Exception $e) {

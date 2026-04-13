@@ -7,6 +7,12 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\BrandController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerAuthController;
+use App\Http\Controllers\Api\CustomerAddressController;
+use App\Http\Controllers\Api\CustomerOrderController;
+use App\Http\Controllers\Api\CustomerPaymentMethodController;
+use App\Http\Controllers\Api\NewsletterController;
+use App\Http\Controllers\Api\AdminOrderController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\WarehouseController;
@@ -69,6 +75,65 @@ Route::prefix('tienda')->middleware('throttle:60,1')->group(function () {
     // Subir imágenes (requiere autenticación)
     Route::post('/productos/{codigo}/imagenes', [\App\Http\Controllers\Api\StoreController::class, 'subirImagenes'])
         ->middleware('auth:sanctum');
+});
+
+// ── Rutas para clientes (tienda en línea) ──────────────────────────────────
+Route::prefix('cliente')->group(function () {
+    // Auth pública
+    Route::prefix('auth')->group(function () {
+        Route::post('register',            [CustomerAuthController::class, 'register']);
+        Route::post('login',               [CustomerAuthController::class, 'login']);
+        Route::post('forgot-password',     [CustomerAuthController::class, 'forgotPassword']);
+        Route::post('verify-reset-code',   [CustomerAuthController::class, 'verifyResetCode']);
+        Route::post('reset-password',      [CustomerAuthController::class, 'resetPassword']);
+    });
+
+    // Auth protegida
+    Route::middleware('auth:sanctum')->prefix('auth')->group(function () {
+        Route::post('logout',           [CustomerAuthController::class, 'logout']);
+        Route::get('me',                [CustomerAuthController::class, 'me']);
+        Route::put('profile',           [CustomerAuthController::class, 'updateProfile']);
+        Route::put('newsletter',        [CustomerAuthController::class, 'toggleNewsletter']);
+        Route::put('change-password',   [CustomerAuthController::class, 'changePassword']);
+    });
+
+    // Recursos protegidos del cliente
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('direcciones',                     [CustomerAddressController::class, 'index']);
+        Route::post('direcciones',                    [CustomerAddressController::class, 'store']);
+        Route::put('direcciones/{id}',                [CustomerAddressController::class, 'update']);
+        Route::delete('direcciones/{id}',             [CustomerAddressController::class, 'destroy']);
+
+        Route::get('pedidos',                         [CustomerOrderController::class, 'index']);
+        Route::get('pedidos/{id}',                    [CustomerOrderController::class, 'show']);
+
+        Route::get('tarjetas',                        [CustomerPaymentMethodController::class, 'index']);
+        Route::post('tarjetas',                       [CustomerPaymentMethodController::class, 'store']);
+        Route::delete('tarjetas/{id}',                [CustomerPaymentMethodController::class, 'destroy']);
+        Route::patch('tarjetas/{id}/default',         [CustomerPaymentMethodController::class, 'setDefault']);
+    });
+});
+
+// ── Pedidos online (admin) ────────────────────────────────────────────────
+Route::middleware('auth:sanctum')->prefix('admin/orders')->group(function () {
+    Route::get('/',          [AdminOrderController::class, 'index']);
+    Route::get('/stats',     [AdminOrderController::class, 'stats']);
+    Route::get('/{id}',      [AdminOrderController::class, 'show']);
+    Route::put('/{id}',      [AdminOrderController::class, 'update']);
+});
+
+// ── Newsletter (para front-almacen, protegido con auth de admin) ───────────
+Route::middleware('auth:sanctum')->prefix('newsletter')->group(function () {
+    Route::get('subscribers',            [NewsletterController::class, 'subscribers']);
+    Route::post('send',                  [NewsletterController::class, 'send']);
+    // Plantillas
+    Route::get('templates',              [NewsletterController::class, 'templates']);
+    Route::post('templates',             [NewsletterController::class, 'storeTemplate']);
+    Route::put('templates/{id}',         [NewsletterController::class, 'updateTemplate']);
+    Route::delete('templates/{id}',      [NewsletterController::class, 'destroyTemplate']);
+    // Historial de campañas
+    Route::get('campaigns',              [NewsletterController::class, 'campaigns']);
+    Route::delete('campaigns/{id}',      [NewsletterController::class, 'destroyCampaign']);
 });
 
 // Rutas protegidas

@@ -3,17 +3,22 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
-class Customer extends Model
+class Customer extends Authenticatable
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasApiTokens, Notifiable;
 
     protected $fillable = [
         'name',
+        'first_name',
+        'last_name',
         'email',
+        'password',
         'phone',
         'address',
         'city',
@@ -26,16 +31,28 @@ class Customer extends Model
         'payment_terms',
         'discount_percentage',
         'is_active',
-        'notes'
+        'notes',
+        'newsletter_subscribed',
+        'birth_date',
+        'gender',
+        'document_number',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'newsletter_subscribed' => 'boolean',
         'credit_limit' => 'decimal:2',
         'discount_percentage' => 'decimal:2',
+        'birth_date' => 'date',
+        'password' => 'hashed',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
-        'deleted_at' => 'datetime'
+        'deleted_at' => 'datetime',
     ];
 
     // Tipos de cliente
@@ -51,12 +68,24 @@ class Customer extends Model
     const PAYMENT_NET_30 = 'net_30';
     const PAYMENT_NET_60 = 'net_60';
 
-    /**
-     * Relación con ventas
-     */
     public function sales(): HasMany
     {
         return $this->hasMany(Sale::class);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(CustomerAddress::class);
+    }
+
+    public function paymentMethods(): HasMany
+    {
+        return $this->hasMany(CustomerPaymentMethod::class);
     }
 
     /**

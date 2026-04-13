@@ -28,6 +28,9 @@ class Order extends Model
         'paid_at',
         'shipped_at',
         'delivered_at',
+        'customer_id',
+        'tracking_number',
+        'shipping_company',
     ];
 
     protected $casts = [
@@ -43,6 +46,11 @@ class Order extends Model
     public function items()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function scopePending($query)
