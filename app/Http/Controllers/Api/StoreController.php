@@ -233,6 +233,23 @@ class StoreController extends Controller
             }
         } catch (\Exception $e) {}
 
+        // Verificar stock disponible antes de crear la orden
+        foreach ($validated['items'] as $item) {
+            $producto = Product::find($item['producto_id']);
+            if (!$producto) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Producto no encontrado.',
+                ], 422);
+            }
+            if ($producto->stock_quantity < $item['cantidad']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Stock insuficiente para \"{$producto->name}\". Disponible: {$producto->stock_quantity}.",
+                ], 422);
+            }
+        }
+
         DB::beginTransaction();
         try {
             // Crear la orden
@@ -269,68 +286,10 @@ class StoreController extends Controller
                     'subtotal' => $item['cantidad'] * $item['precio'],
                 ]);
 
-                // Opcional: Reducir stock (descomentar si quieres reducir automáticamente)
-                // $producto->decrement('stock', $item['cantidad']);
+                // El stock se descuenta en updatePayment() al confirmar el pago con Wompi
             }
 
             DB::commit();
-
-            // Enviar correo de confirmación
-            try {
-                $emailTo   = $validated['cliente_email'];
-                $emailName = $validated['cliente_nombre'];
-                $fmt = fn($n) => '$' . number_format($n, 0, ',', '.');
-
-                $itemsHtml = '';
-                foreach ($validated['items'] as $item) {
-                    $p = Product::find($item['producto_id']);
-                    $nombre = $p ? $p->name : 'Producto';
-                    $itemsHtml .= "<tr>
-                        <td style='padding:8px;border-bottom:1px solid #eee'>{$nombre}</td>
-                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:center'>{$item['cantidad']}</td>
-                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item['precio'])}</td>
-                        <td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{$fmt($item['cantidad'] * $item['precio'])}</td>
-                    </tr>";
-                }
-
-                $html = "
-                <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333'>
-                  <div style='background:#1a1a1a;padding:24px;text-align:center'>
-                    <h1 style='color:#fff;margin:0;font-size:22px'>Moto Spa</h1>
-                    <p style='color:#aaa;margin:6px 0 0'>Confirmación de pedido</p>
-                  </div>
-                  <div style='padding:24px'>
-                    <p>Hola <strong>{$emailName}</strong>,</p>
-                    <p>¡Gracias por tu compra! Tu pedido ha sido recibido y está siendo procesado.</p>
-                    <div style='background:#f5f5f5;padding:16px;border-radius:8px;margin:16px 0'>
-                      <p style='margin:0 0 4px'><strong>Número de pedido:</strong> {$orden->order_number}</p>
-                      <p style='margin:0'><strong>Total:</strong> {$fmt($validated['total'])}</p>
-                    </div>
-                    <table style='width:100%;border-collapse:collapse;margin:16px 0'>
-                      <thead>
-                        <tr style='background:#f0f0f0'>
-                          <th style='padding:8px;text-align:left'>Producto</th>
-                          <th style='padding:8px;text-align:center'>Cant.</th>
-                          <th style='padding:8px;text-align:right'>Precio</th>
-                          <th style='padding:8px;text-align:right'>Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody>{$itemsHtml}</tbody>
-                    </table>
-                    <p style='text-align:right'><strong>Envío:</strong> {$fmt($validated['envio'] ?? 0)}</p>
-                    <p style='text-align:right;font-size:18px'><strong>Total: {$fmt($validated['total'])}</strong></p>
-                    <hr style='border:none;border-top:1px solid #eee;margin:20px 0'>
-                    <p style='color:#666;font-size:13px'>Te notificaremos cuando tu pedido sea enviado. Si tienes preguntas, contáctanos.</p>
-                  </div>
-                </div>";
-
-                Mail::html($html, function ($message) use ($emailTo, $emailName, $orden) {
-                    $message->to($emailTo, $emailName)
-                            ->subject("Confirmación de pedido {$orden->order_number} - Moto Spa");
-                });
-            } catch (\Exception $mailEx) {
-                // No bloquear si falla el correo
-            }
 
             return response()->json([
                 'success' => true,
@@ -351,34 +310,126 @@ class StoreController extends Controller
     }
 
     /**
-     * Actualizar referencia de pago de una orden
+     * Confirmar pago de una orden (llamado por el frontend tras aprobación de Wompi)
      * PATCH /api/tienda/ordenes/{orderNumber}/payment
      */
     public function updatePayment(Request $request, $orderNumber)
     {
         $validated = $request->validate([
             'payment_reference' => 'required|string',
-            'status' => 'nullable|string',
+            'status'            => 'nullable|string',
         ]);
 
-        $order = Order::where('order_number', $orderNumber)->first();
+        $order = Order::with('items')->where('order_number', $orderNumber)->first();
 
         if (!$order) {
             return response()->json([
                 'success' => false,
-                'message' => 'Orden no encontrada'
+                'message' => 'Orden no encontrada',
             ], 404);
         }
 
-        $order->update([
-            'payment_reference' => $validated['payment_reference'],
-            'status' => $validated['status'] ?? $order->status,
-            'paid_at' => now(),
-        ]);
+        $prevStatus = $order->status;
+        $newStatus  = $validated['status'] ?? 'paid';
+
+        DB::beginTransaction();
+        try {
+            $order->update([
+                'payment_reference' => $validated['payment_reference'],
+                'status'            => $newStatus,
+                'paid_at'           => now(),
+            ]);
+
+            // Descontar stock solo cuando la orden pasa a pagada por primera vez
+            if ($newStatus === 'paid' && $prevStatus !== 'paid') {
+                foreach ($order->items as $item) {
+                    Product::where('id', $item->product_id)
+                        ->decrement('stock_quantity', $item->quantity);
+                }
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar la orden: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        // Enviar correo de confirmación de compra al cliente
+        if ($newStatus === 'paid' && $prevStatus !== 'paid') {
+            try {
+                $fmt = fn($n) => '$' . number_format((float) $n, 0, ',', '.');
+
+                $itemsHtml = '';
+                foreach ($order->items as $item) {
+                    $itemsHtml .= "
+                    <tr>
+                      <td style='padding:10px 12px;border-bottom:1px solid #f0f0f0'>{$item->product_name}</td>
+                      <td style='padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:center'>{$item->quantity}</td>
+                      <td style='padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right'>{$fmt($item->price)}</td>
+                      <td style='padding:10px 12px;border-bottom:1px solid #f0f0f0;text-align:right'>{$fmt($item->subtotal)}</td>
+                    </tr>";
+                }
+
+                $envioTexto = (float) $order->shipping_cost > 0 ? $fmt($order->shipping_cost) : 'GRATIS';
+
+                $html = "
+                <div style='font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#333;background:#fff'>
+                  <div style='background:#1a1a1a;padding:28px 24px;text-align:center'>
+                    <h1 style='color:#fff;margin:0;font-size:24px;letter-spacing:-0.5px'>Moto Spa</h1>
+                    <p style='color:#999;margin:6px 0 0;font-size:13px'>Confirmación de pago recibido</p>
+                  </div>
+                  <div style='padding:32px 24px'>
+                    <h2 style='font-size:20px;color:#111;margin:0 0 6px'>¡Pago aprobado! ✅</h2>
+                    <p style='color:#666;font-size:14px;margin:0 0 24px'>
+                      Hola <strong>{$order->customer_name}</strong>, tu pago fue procesado correctamente.
+                      Pronto comenzaremos a preparar tu pedido.
+                    </p>
+                    <div style='background:#f8f9fa;border-radius:10px;padding:16px 20px;margin:0 0 24px'>
+                      <p style='margin:0 0 6px;font-size:13px;color:#888'>Número de pedido</p>
+                      <p style='margin:0;font-size:20px;font-weight:700;color:#111;font-family:monospace'>{$order->order_number}</p>
+                    </div>
+                    <table style='width:100%;border-collapse:collapse;margin-bottom:16px'>
+                      <thead>
+                        <tr style='background:#f5f5f5;border-radius:6px'>
+                          <th style='padding:10px 12px;text-align:left;font-size:12px;color:#666;font-weight:600;text-transform:uppercase'>Producto</th>
+                          <th style='padding:10px 12px;text-align:center;font-size:12px;color:#666;font-weight:600;text-transform:uppercase'>Cant.</th>
+                          <th style='padding:10px 12px;text-align:right;font-size:12px;color:#666;font-weight:600;text-transform:uppercase'>Precio</th>
+                          <th style='padding:10px 12px;text-align:right;font-size:12px;color:#666;font-weight:600;text-transform:uppercase'>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>{$itemsHtml}</tbody>
+                    </table>
+                    <div style='text-align:right;border-top:2px solid #f0f0f0;padding-top:12px'>
+                      <p style='margin:4px 0;font-size:13px;color:#666'>Subtotal: <strong>{$fmt($order->subtotal)}</strong></p>
+                      <p style='margin:4px 0;font-size:13px;color:#666'>Envío: <strong>{$envioTexto}</strong></p>
+                      <p style='margin:8px 0 0;font-size:18px;color:#111;font-weight:700'>Total pagado: {$fmt($order->total)}</p>
+                    </div>
+                    <hr style='border:none;border-top:1px solid #eee;margin:24px 0'>
+                    <p style='color:#666;font-size:13px;margin:0'>
+                      📦 Te notificaremos por correo cuando tu pedido sea enviado con el número de guía.<br>
+                      Si tienes dudas, responde este correo.
+                    </p>
+                  </div>
+                  <div style='background:#f9fafb;padding:16px 24px;text-align:center;border-top:1px solid #e5e7eb'>
+                    <p style='margin:0;color:#aaa;font-size:12px'>© Moto Spa · Todos los derechos reservados</p>
+                  </div>
+                </div>";
+
+                Mail::html($html, function ($message) use ($order) {
+                    $message->to($order->customer_email, $order->customer_name)
+                            ->subject("✅ Pago confirmado · Pedido {$order->order_number} - Moto Spa");
+                });
+            } catch (\Exception $mailEx) {
+                // No bloquear si falla el correo
+            }
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Orden actualizada exitosamente',
+            'message' => 'Pago confirmado exitosamente',
         ]);
     }
 
