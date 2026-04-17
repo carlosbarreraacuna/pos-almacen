@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\StockTransferController;
 use App\Http\Controllers\Api\StockAdjustmentController;
 use App\Http\Controllers\Api\WompiController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\SettingsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -365,6 +366,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // === MÓDULOS PENDIENTES ===
     // TODO: Implementar rutas de compras y proveedores
     // TODO: Implementar rutas de reportes y analytics
+    // Configuración del sistema
+    Route::get('settings',  [SettingsController::class, 'index']);
+    Route::post('settings', [SettingsController::class, 'update']);
+
     // TODO: Implementar rutas de configuración
     // TODO: Implementar rutas de usuarios y permisos
 });

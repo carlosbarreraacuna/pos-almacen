@@ -78,6 +78,8 @@ class InventoryController extends Controller
             'brand_id'          => 'nullable|exists:brands,id',
             'unit_price'        => 'required|numeric|min:0',
             'cost_price'        => 'nullable|numeric|min:0',
+            'freight_cost'      => 'nullable|numeric|min:0',
+            'profit_margin'     => 'nullable|numeric|min:0|max:1000',
             'stock_quantity'    => 'required|integer|min:0',
             'min_stock_level'   => 'required|integer|min:0',
             'max_stock_level'   => 'nullable|integer|min:0',
@@ -164,6 +166,8 @@ class InventoryController extends Controller
             'brand_id'            => 'nullable|exists:brands,id',
             'unit_price'          => 'sometimes|required|numeric|min:0',
             'cost_price'          => 'nullable|numeric|min:0',
+            'freight_cost'        => 'nullable|numeric|min:0',
+            'profit_margin'       => 'nullable|numeric|min:0|max:1000',
             'discount_percentage' => 'nullable|integer|min:0|max:100',
             'min_stock_level'     => 'sometimes|required|integer|min:0',
             'max_stock_level'     => 'nullable|integer|min:0',
@@ -415,31 +419,45 @@ class InventoryController extends Controller
      */
     public function downloadTemplate(): JsonResponse
     {
+        // Orden de columnas — debe coincidir exactamente con ProductsImport::modelNew()
+        // A=SKU  B=Nombre  C=Categoría  D=Costo Base  E=Flete($)  F=IVA(%)  G=Margen(%)
+        // H=Precio Venta (fórmula =(D+E)*(1+F/100)*(1+G/100))
+        // I=Descuento(%)  J=Stock  K=StockMin  L=Presentación  M=Marca  N=Modelos  O=Descripción  P=Fecha
         $headers = [
-            'SKU',
-            'Nombre',
-            'Categoría',
-            'Precio Venta',
-            'Costo',
-            'Stock',
-            'Stock Mínimo',
-            'Unidad de Medida',
-            'Marca',
-            'Modelos Compatibles',
-            'Descripción',
-            'Fecha Creación',
+            'SKU',                   // 0  A  obligatorio
+            'Nombre',                // 1  B  obligatorio
+            'Categoría',             // 2  C
+            'Costo Base',            // 3  D  ← inputs de la fórmula
+            'Flete ($)',             // 4  E
+            'IVA (%)',               // 5  F
+            'Margen Ganancia (%)',   // 6  G
+            'Precio Venta',          // 7  H  ← resultado (fórmula o valor manual)
+            'Descuento (%)',         // 8  I
+            'Stock',                 // 9  J  obligatorio
+            'Stock Mínimo',          // 10 K
+            'Unidad de Medida',      // 11 L
+            'Marca',                 // 12 M
+            'Modelos Compatibles',   // 13 N
+            'Descripción',           // 14 O
+            'Fecha Creación',        // 15 P
         ];
 
+        // Fila de ejemplo — el frontend aplicará la fórmula Excel en col H (Precio Venta)
+        // (8000 + 2000) × 1.19 × 1.30 = 15.470
         $example = [
-            '36C001-R',
-            'CUNA DIR C/RODILLOS',
-            'CUNAS DE DIRECCIÓN',
-            '10000',
-            '8000',
-            '1',
-            '1',
-            'CAJA X10',
-            'DARROW',
+            '36C001-R',              // SKU
+            'CUNA DIR C/RODILLOS',   // Nombre
+            'CUNAS DE DIRECCIÓN',    // Categoría
+            '8000',                  // Costo Base
+            '2000',                  // Flete
+            '19',                    // IVA
+            '30',                    // Margen
+            '0',                     // Precio Venta — el frontend reemplaza con fórmula Excel
+            '0',                     // Descuento
+            '1',                     // Stock
+            '1',                     // Stock Mínimo
+            'CAJA X10',              // Presentación
+            'DARROW',                // Marca
             'BM100 / PULSAR 180 / BOXER 100',
             'CUNA DIR C/RODILLOS',
             date('d/m/Y'),
@@ -451,12 +469,12 @@ class InventoryController extends Controller
                 'headers'      => $headers,
                 'example'      => $example,
                 'instructions' => [
-                    'El archivo debe ser formato Excel (.xlsx, .xls)',
-                    'La primera fila debe contener los encabezados exactos',
-                    'SKU, Nombre, Precio Venta y Stock son obligatorios',
-                    'Si el SKU ya existe, se actualizará el producto existente',
-                    'Modelos Compatibles: lista los modelos de moto separados por /',
-                    'Fecha Creación es opcional, se puede dejar en blanco',
+                    'Fórmula: Precio Venta = (Costo Base + Flete) × (1 + IVA/100) × (1 + Margen Ganancia/100)',
+                    'La celda "Precio Venta" tiene fórmula automática — cámbia Costo/Flete/IVA/Margen y se actualiza sola',
+                    'Para precio manual: escribe directamente en "Precio Venta" (reemplaza la fórmula)',
+                    'SKU, Nombre y Stock son obligatorios',
+                    'Si el SKU ya existe, el producto se actualizará',
+                    'Categoría y Marca se crean automáticamente si no existen',
                 ],
             ],
         ]);

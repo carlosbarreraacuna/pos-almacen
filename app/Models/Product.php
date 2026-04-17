@@ -21,6 +21,8 @@ class Product extends Model
         'unit_price',
         'discount_percentage',
         'cost_price',
+        'freight_cost',
+        'profit_margin',
         'stock_quantity',
         'min_stock_level',
         'max_stock_level',
@@ -38,6 +40,8 @@ class Product extends Model
         'unit_price' => 'decimal:2',
         'discount_percentage' => 'integer',
         'cost_price' => 'decimal:2',
+        'freight_cost' => 'decimal:2',
+        'profit_margin' => 'decimal:2',
         'stock_quantity' => 'integer',
         'min_stock_level' => 'integer',
         'max_stock_level' => 'integer',
@@ -138,14 +142,6 @@ class Product extends Model
             'notes' => "Stock updated via {$type}",
             'user_id' => auth()->id()
         ]);
-    }
-
-    public function getProfitMarginAttribute()
-    {
-        if ($this->cost_price > 0) {
-            return (($this->unit_price - $this->cost_price) / $this->cost_price) * 100;
-        }
-        return 0;
     }
 
     public function getStockValueAttribute()
